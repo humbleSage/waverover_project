@@ -3,6 +3,19 @@ This document contains known-good bring-up steps for Wave Rover teleop and LiDAR
 
 ---
 
+## Project Workflow Notes
+
+Current workflow rules:
+- The robo-dev laptop is the main development machine.
+- The rover Pi is a runtime/test target only.
+- Do not do local development on the Pi.
+- If anything is created on the Pi during testing, copy it back to the laptop/Mac before any pull, reset, sync, or deploy.
+- GitHub is for backup/sharing.
+- Avoid nested Git repositories or accidental submodules inside project folders.
+- Before major Git operations, make a dated folder backup.
+
+---
+
 ## PS5 Controller Teleop Bring-Up
 
 ### Goal
@@ -286,7 +299,7 @@ Check recent USB/system messages:
 
 `sudo dmesg | tail -n 50`
 
-Common gotchas
+#### Common gotchas
 - Do not launch RViz/view launch files on the headless Pi.
 - Missing device is often a cable/USB seating problem.
 - Confirm `/dev/ttyUSB0` vs `/dev/ttyACM0`.
@@ -308,19 +321,21 @@ In the LiDAR terminal:
 
 ---
 
-## ROS 2 Webcam Bring-Up
+## ROS 2 Brio Webcam Bring-Up
 
 ### Goal
 
-Publish the installed USB webcam as a ROS 2 image stream and view it from the laptop.
+Publish the mounted Logitech Brio camera as a ROS 2 image stream and view it from the laptop.
 
 ### Current Status
 
-The installed USB webcam is detected as `/dev/video0`.
+The mounted Brio camera is detected as `/dev/video0`.
+
+The earlier placeholder webcam worked but had poor image quality and high latency. The Brio camera gives a much better image and tolerable latency for slow indoor scouting.
 
 Motion was tested first and worked as a browser stream, but latency was too high for comfortable teleop. Motion is now disabled so it does not grab `/dev/video0` at boot.
 
-### On the Rover Pi — Start USB Camera Node
+### On the Rover Pi — Start Brio Camera Node
 
 ```
 source /opt/ros/jazzy/setup.bash
@@ -328,16 +343,21 @@ source ~/robot_ws/install/setup.bash
 
 ros2 run usb_cam usb_cam_node_exe --ros-args \
   -p video_device:=/dev/video0 \
-  -p image_width:=320 \
-  -p image_height:=240 \
+  -p image_width:=640 \
+  -p image_height:=480 \
   -p framerate:=15.0 \
-  -p pixel_format:=yuyv2rgb
+  -p pixel_format:=mjpeg2rgb
 ```
+
 Expected result:
 - `usb_cam` starts successfully.
 - `/image_raw` is published.
-- `/image_raw/`compressed is available.
+- `/image_raw/compressed` is available.
 - `/camera_info` is available.
+
+If mjpeg2rgb does not work, check supported formats:
+
+`ros2 run usb_cam usb_cam_node_exe --ros-args -p pixel_format:="test"`
 
 ### On the Laptop — View Camera Feed
 
@@ -353,7 +373,7 @@ ros2 run image_view image_view --ros-args \
 Expected result:
 - A viewer window opens on the laptop.
 - The rover camera feed is visible.
-- Latency is usable enough for testing, though not yet final-quality.
+- Latency is usable enough for slow indoor testing.
 
 ### Useful Checks
 
@@ -362,16 +382,15 @@ ros2 topic list
 ros2 topic hz /image_raw
 ros2 topic hz /image_raw/compressed
 ```
-### Observed early test rates:
-- `/image_raw`: about 7.6 FPS
-- `/image_raw/compressed`: about 8.3 FPS
+### Observed Brio Test Rate
+- Camera feed is currently about 15 FPS.
 
 Notes / Gotchas
 - Do not run Motion at the same time as `usb_cam`; it may grab `/dev/video0`.
 - Motion service has been disabled with: `sudo systemctl disable motion`.
 - Viewing `/image_raw/compressed` directly may hang.
 - Use `/image_raw` with `image_transport:=compressed` instead.
-- The current webcam is a placeholder camera. Image quality is limited, but the ROS 2 camera pipeline works.
+- The Brio is currently the working Scout Mode camera.
 
 ---
 
@@ -459,3 +478,65 @@ Scout Mode v0 is working when:
 - Brio camera publishes through ROS 2.
 - Laptop can view the camera feed.
 - Rover can be driven slowly while watching the live camera view.
+
+---
+
+## Scout Mode v0 Launch Files
+
+### Goal
+
+Start Scout Mode v0 with one launch command on the rover Pi and one launch command on the laptop.
+
+### Current Status
+
+Scout Mode v0 launch files are working.
+
+The Pi-side launch file starts:
+
+- `cmd_vel_to_serial`
+- `usb_cam_node_exe` for the mounted Brio camera
+
+The laptop-side launch file starts:
+
+- `game_controller_node`
+- `joy_to_cmdvel`
+- `image_view` using compressed image transport
+
+### Rover Pi — Start Scout Runtime
+
+```
+source /opt/ros/jazzy/setup.bash
+source ~/robot_ws/install/setup.bash
+ros2 launch waverover_base scout_pi_launch.py
+```
+
+#### Expected result:
+- Serial bridge starts.
+- Brio camera starts.
+- /image_raw publishes.
+- /image_raw/compressed publishes.
+- Rover is ready to receive /cmd_vel.
+
+### Laptop — Start Scout Operator Stack
+
+```
+source /opt/ros/jazzy/setup.bash
+source ~/robot_ws/install/setup.bash
+ros2 launch waverover_control scout_laptop_launch.py
+```
+
+#### Expected result:
+
+- Controller node starts.
+- Custom teleop mapping node starts.
+- Camera viewer opens.
+- Controller commands publish to /cmd_vel.
+
+#### Success Condition
+
+Scout Mode v0 launch files are working when:
+- Pi launch starts the serial bridge and Brio camera.
+- Laptop launch starts controller input, teleop mapping, and camera viewer.
+- Camera feed is visible on the laptop.
+- Rover can be driven slowly while watching the live camera feed.
+- Releasing throttle stops the rover.
