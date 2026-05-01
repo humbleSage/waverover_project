@@ -1,8 +1,8 @@
 build/
 install/
 log/
-.vscode/
-.idea/
 __pycache__/
 *.pyc
-.DS_Store
+.vscode/
+.idea/
+src/rplidar_ros
