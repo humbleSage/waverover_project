@@ -319,6 +319,17 @@ In the LiDAR terminal:
 
 `Ctrl+C`
 
+### Current Known-Good LiDAR Baseline
+
+- LiDAR device path: `/dev/ttyUSB0`
+- Launch command:
+
+`ros2 launch rplidar_ros rplidar_a1_launch.py serial_port:=/dev/ttyUSB0`
+
+- /scan appears: Yes
+- Approximate /scan rate: 7.9 Hz
+- Warnings/errors: None observed
+
 ---
 
 ## ROS 2 Brio Webcam Bring-Up
@@ -540,3 +551,22 @@ Scout Mode v0 launch files are working when:
 - Camera feed is visible on the laptop.
 - Rover can be driven slowly while watching the live camera feed.
 - Releasing throttle stops the rover.
+
+### Scout + LiDAR Coexistence Baseline
+
+Scout Mode and LiDAR can run together.
+
+Observed working stack:
+
+- Pi launch: `ros2 launch waverover_base scout_pi_launch.py`
+- LiDAR launch: `ros2 launch rplidar_ros rplidar_a1_launch.py serial_port:=/dev/ttyUSB0`
+- Laptop launch: `ros2 launch waverover_control scout_laptop_launch.py`
+- `/scan` publishes
+- Brio camera publishes
+- Controller teleop remains functional
+
+Known issue to investigate:
+
+- Connection/viewing reliability degrades during combined Scout + LiDAR testing.
+- Cause is not yet confirmed.
+- Possible causes include Wi-Fi/network instability, Pi CPU load, USB bandwidth, image streaming overhead, or combined sensor load.
