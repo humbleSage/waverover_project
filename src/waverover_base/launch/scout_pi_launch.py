@@ -1,4 +1,5 @@
 from launch import LaunchDescription
+from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
 
 
@@ -11,17 +12,18 @@ def generate_launch_description():
             output='screen',
         ),
 
-        Node(
-            package='usb_cam',
-            executable='usb_cam_node_exe',
-            name='brio_camera',
+        ExecuteProcess(
+            cmd=[
+                'ustreamer',
+                '--device=/dev/video0',
+                '--format=MJPEG',
+                '--resolution=640x480',
+                '--desired-fps=30',
+                '--host=0.0.0.0',
+                '--port=8080',
+                '--drop-same-frames=0',
+            ],
+            name='brio_ustreamer',
             output='screen',
-            parameters=[{
-                'video_device': '/dev/video0',
-                'image_width': 640,
-                'image_height': 480,
-                'framerate': 15.0,
-                'pixel_format': 'mjpeg2rgb',
-            }],
         ),
     ])
