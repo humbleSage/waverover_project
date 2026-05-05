@@ -14,7 +14,7 @@ class JoyToCmdVel(Node):
         self.max_linear = 1.0
         self.max_angular = 1.0
 
-        self.deadzone_horizontal = 0.20
+        self.deadzone_horizontal = 0.40
         self.deadzone_vertical = 0.12
         self.cardinal_forward_threshold = 0.40
         self.cardinal_turn_suppress_threshold = 0.20

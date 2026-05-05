@@ -18,7 +18,7 @@ class ObstacleAssistNode(Node):
 
         # Obstacle behavior
         self.declare_parameter("stop_distance_m", 0.35)
-        self.declare_parameter("slow_distance_m", 0.70)
+        self.declare_parameter("slow_distance_m", 1.0)
         self.declare_parameter("enable_speed_scaling", False)
         self.declare_parameter("enabled", True)
 
