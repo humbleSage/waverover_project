@@ -95,6 +95,12 @@ class ObstacleAssistNode(Node):
 
         self.cmd_pub.publish(filtered_cmd)
 
+        closest_angle, closest_distance = self.get_closest_object_angle_deg()
+        self.get_logger().info(
+            f"Closest object angle: {closest_angle}, distance: {closest_distance}",
+            throttle_duration_sec=1.0,
+        )
+
     def get_front_min_distance(self):
         scan = self.latest_scan
         front_angle_deg = self.get_parameter("front_angle_deg").value
@@ -116,6 +122,29 @@ class ObstacleAssistNode(Node):
                     min_distance = distance
 
         return min_distance
+    
+    def get_closest_object_angle_deg(self):
+        scan = self.latest_scan
+        best_distance = None
+        best_angle = None
+
+        for i, distance in enumerate(scan.ranges):
+            if math.isinf(distance) or math.isnan(distance):
+                continue
+
+            if distance < scan.range_min or distance > scan.range_max:
+                continue
+
+            angle = scan.angle_min + i * scan.angle_increment
+
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                best_angle = angle
+
+        if best_angle is None:
+            return None, None
+
+        return math.degrees(best_angle), best_distance
     
 def main(args=None):
     rclpy.init(args=args)
