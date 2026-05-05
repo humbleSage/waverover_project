@@ -8,7 +8,7 @@ class JoyToCmdVel(Node):
     def __init__(self):
         super().__init__('joy_to_cmdvel')
 
-        self.pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.pub = self.create_publisher(Twist, '/cmd_vel_raw', 10)
         self.sub = self.create_subscription(Joy, '/joy', self.joy_callback, 10)
 
         self.max_linear = 1.0
