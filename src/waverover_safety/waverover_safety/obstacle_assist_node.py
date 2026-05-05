@@ -18,8 +18,8 @@ class ObstacleAssistNode(Node):
         self.declare_parameter("front_half_width_deg", 25.0)
 
         # Obstacle behavior.
-        self.declare_parameter("stop_distance_m", 0.35)
-        self.declare_parameter("slow_distance_m", 0.70)
+        self.declare_parameter("stop_distance_m", 0.5)
+        self.declare_parameter("slow_distance_m", 1.0)
         self.declare_parameter("enable_speed_scaling", False)
         self.declare_parameter("enabled", True)
 
