@@ -1,5 +1,30 @@
 # Wave Rover Runbook
-This document contains known-good bring-up steps for Wave Rover teleop and LiDAR.
+
+This document contains known-good bring-up steps for Wave Rover teleop, LiDAR-assisted obstacle avoidance, Brio/uStreamer scout camera streaming, and current launch-file workflows.
+
+Current normal driving mode is Scout Mode v0 with LiDAR-assisted teleop:
+
+```text
+PS5 controller
+  ↓
+game_controller_node
+  ↓
+/joy
+  ↓
+joy_to_cmdvel
+  ↓
+/cmd_vel_raw
+  ↓
+obstacle_assist_node + /scan
+  ↓
+/cmd_vel
+  ↓
+cmd_vel_to_serial
+  ↓
+Wave Rover motors
+```
+
+The Brio camera feed is handled outside ROS 2 through uStreamer.
 
 ---
 
@@ -16,7 +41,9 @@ Current workflow rules:
 
 ---
 
-## PS5 Controller Teleop Bring-Up
+## Legacy / Manual PS5 Controller Teleop Bring-Up
+
+> Note: This is now a legacy/manual baseline. The current normal driving path uses LiDAR-assisted teleop, where `joy_to_cmdvel` publishes `/cmd_vel_raw`, `obstacle_assist_node` filters it, and `cmd_vel_to_serial` receives `/cmd_vel`.
 
 ### Goal
 Drive the Wave Rover with a PS5-style controller through the custom ROS 2 stack.
@@ -30,11 +57,10 @@ Drive the Wave Rover with a PS5-style controller through the custom ROS 2 stack.
   - 2 terminals on the Linux laptop
 
 ### Terminal Layout
-| Machine | Terminal | Purpose |
-|---|---|---|
 | Rover Pi | Terminal 1 | Run serial bridge: `/cmd_vel` → rover hardware |
+| Rover Pi | Terminal 2 | Run obstacle assist: `/cmd_vel_raw` + `/scan` → `/cmd_vel` |
 | Laptop | Terminal 1 | Run controller input node: controller → `/joy` |
-| Laptop | Terminal 2 | Run custom teleop node: `/joy` → `/cmd_vel` |
+| Laptop | Terminal 2 | Run custom teleop node: `/joy` → `/cmd_vel_raw` |
 
 ---
 
@@ -85,9 +111,12 @@ ros2 run waverover_control joy_to_cmdvel
 
 Expected result:
 - Custom mapping node starts.
-- `/joy` is converted into `/cmd_vel`.
+- `/joy` is converted into `/cmd_vel_raw`.
+- `obstacle_assist_node` filters `/cmd_vel_raw` into `/cmd_vel`.
 
-Optional check:
+Optional checks:
+
+`ros2 topic echo /cmd_vel_raw`
 
 `ros2 topic echo /cmd_vel`
 
@@ -117,7 +146,9 @@ Expected topics include:
 
 ```
 /joy
+/cmd_vel_raw
 /cmd_vel
+/scan
 ```
 
 #### If `/joy` is missing or dead
@@ -132,7 +163,7 @@ Possible causes:
 - `game_controller_node` is not running.
 - ROS environment is not sourced on the laptop.
 
-#### If `/joy` works but `/cmd_vel` is missing or dead
+#### If `/joy` works but `/cmd_vel_raw` is missing or dead
 
 Check that the custom mapping node is running:
 
@@ -143,6 +174,19 @@ Possible causes:
 - Workspace is not sourced.
 - Package was not rebuilt after changes.
 - Controller mapping issue.
+- `joy_to_cmdvel` should publish `/cmd_vel_raw`, not `/cmd_vel`, in the assisted teleop pipeline.
+
+#### If `/cmd_vel_raw` works but `/cmd_vel` is missing or dead
+
+Check that obstacle assist is running:
+
+`ros2 run waverover_safety obstacle_assist_node`
+
+Possible causes:
+- `obstacle_assist_node` is not running.
+- `/scan` is missing or LiDAR is not running.
+- Workspace is not sourced.
+- `waverover_safety` was not rebuilt after changes.
 
 #### If `/cmd_vel` works but rover does not move
 
@@ -334,6 +378,172 @@ In the LiDAR terminal:
 
 ---
 
+## LiDAR-Assisted Teleop / Obstacle Avoidance
+
+### Goal
+
+Use the RPLIDAR to block forward motion when an obstacle is too close in front of the rover.
+
+This is the current Phase 3 known-good driving safety layer.
+
+### Current Status
+
+LiDAR-assisted teleop v0.1 is working.
+
+Current behavior:
+- Forward motion is blocked when an obstacle is detected in the front LiDAR sector.
+- Reverse remains allowed.
+- Turning remains allowed.
+- This lets the rover back away or rotate out of trouble.
+
+### Current Control Pipeline
+
+```
+PS5 controller
+  ↓
+game_controller_node
+  ↓
+/joy
+  ↓
+joy_to_cmdvel
+  ↓
+/cmd_vel_raw
+  ↓
+obstacle_assist_node
+  + /scan from RPLIDAR
+  ↓
+/cmd_vel
+  ↓
+cmd_vel_to_serial
+  ↓
+Wave Rover motors
+```
+
+### Important Topic Change
+
+`joy_to_cmdvel` now publishes to:
+
+`/cmd_vel_raw`
+
+It does not publish directly to /cmd_vel in the assisted teleop pipeline.
+
+`cmd_vel_to_serial` still listens to:
+
+`/cmd_vel`
+
+The obstacle assist node sits between them.
+
+### Obstacle Assist Node
+
+#### Package:
+
+`waverover_safety`
+
+#### Executable:
+
+`obstacle_assist_node`
+
+#### Subscriptions:
+
+- `/cmd_vel_raw`
+- `/scan`
+
+#### Publication:
+
+- `/cmd_vel`
+
+### Known-Good Parameters
+
+- front_center_deg: 180.0
+- front_half_width_deg: 25.0
+- stop_distance_m: 0.35
+- slow_distance_m: 0.70
+- enable_speed_scaling: false
+- enabled: true
+- debug_sectors: false
+
+The Wave Rover’s physical front corresponds to 180.0 degrees in the RPLIDAR scan frame.
+
+Speed scaling exists in the node, but is intentionally disabled for Phase 3 closeout. Drive feel and tuning will be handled in the next tuning phase.
+
+### Manual Obstacle Assist Command
+
+If testing manually on the rover Pi:
+
+```
+source /opt/ros/jazzy/setup.bash
+source ~/waverover_ws/install/setup.bash
+
+ros2 run waverover_safety obstacle_assist_node
+```
+
+### Debug Sector Mode
+
+Use this only when recalibrating LiDAR direction:
+
+`ros2 run waverover_safety obstacle_assist_node --ros-args -p debug_sectors:=true`
+
+### Wiring Checks
+
+#### Check topics:
+
+`ros2 topic list | grep cmd_vel`
+
+#### Expected:
+
+```
+/cmd_vel
+/cmd_vel_raw
+```
+
+#### Check command pipeline:
+
+```
+ros2 topic info /cmd_vel_raw
+ros2 topic info /cmd_vel
+```
+
+#### Expected when both Pi and laptop launch files are running:
+
+```
+/cmd_vel_raw:
+  Publisher count: 1
+  Subscription count: 1
+
+/cmd_vel:
+  Publisher count: 1
+  Subscription count: 1
+```
+
+#### Expected wiring:
+- `/cmd_vel_raw` publisher: `joy_to_cmdvel`
+- `/cmd_vel_raw` subscriber: `obstacle_assist_node`
+- `/cmd_vel` publisher: `obstacle_assist_node`
+- `/cmd_vel` subscriber: `cmd_vel_to_serial`
+
+### Physical Test
+
+Use low speed.
+
+| Test | Expected Result |
+|---|---|
+| No obstacle in front, drive forward | Rover moves forward |
+| Obstacle in front, drive forward | Forward motion is blocked |
+| Obstacle in front, reverse | Rover backs away |
+| Obstacle in front, turn | Rover turns |
+| Obstacle on side only, drive forward | Forward motion is allowed |
+
+### Known-Good Phase 3 Result
+
+- `/scan` publishes while driving.
+- `/scan` rate is approximately 8 Hz.
+- RViz displays the scan.
+- LiDAR, uStreamer, obstacle assist, and teleop coexist.
+- Pi launcher starts `rplidar_node`, `obstacle_assist_node`, `cmd_vel_to_serial`, and uStreamer successfully.
+- Final obstacle behavior test passed.
+
+---
+
 ## Brio / uStreamer Scout Camera Bring-Up
 
 ### Goal
@@ -501,9 +711,13 @@ Scout Mode v0 is working.
 ### Current architecture:
 
 - Rover control runs through ROS 2.
+- Controller commands publish to `/cmd_vel_raw`.
+- `obstacle_assist_node` filters `/cmd_vel_raw` using `/scan`.
+- Filtered drive commands publish to `/cmd_vel`.
+- `cmd_vel_to_serial` sends `/cmd_vel` to the rover hardware.
 - Brio camera feed runs through uStreamer outside ROS 2.
 - Browser is used as the driver camera view.
-- LiDAR remains available as a separate ROS 2 sensor.
+- RPLIDAR publishes `/scan`.
 
 ### Rover Pi Terminal 1 — Start Scout Runtime
 
@@ -515,7 +729,9 @@ ros2 launch waverover_base scout_pi_launch.py
 
 #### Current Pi launch starts:
 
-- cmd_vel_to_serial
+- `rplidar_node`
+- `obstacle_assist_node`
+- `cmd_vel_to_serial`
 - uStreamer Brio camera feed
 
 ### Browser — Open Camera Feed
@@ -538,10 +754,10 @@ ros2 launch waverover_control scout_laptop_launch.py
 
 #### Current laptop launch starts:
 
-- game_controller_node
-- joy_to_cmdvel
+- `game_controller_node`
+- `joy_to_cmdvel`
 
-It does not start image_view.
+`joy_to_cmdvel` publishes `/cmd_vel_raw` for the assisted teleop pipeline.
 
 ### Safety Notes
 
@@ -562,6 +778,9 @@ It does not start image_view.
 - Controller teleop works.
 - Rover can be driven slowly while watching the live browser camera view.
 - Releasing throttle stops the rover.
+- `/scan` is publishing.
+- `/cmd_vel_raw` and `/cmd_vel` are both present.
+- Obstacle assist blocks forward motion when an obstacle is directly in front.
 
 ---
 
@@ -577,6 +796,8 @@ Scout Mode v0 launch files are working.
 
 The Pi-side launch file starts:
 
+- rplidar_node
+- obstacle_assist_node
 - cmd_vel_to_serial
 - uStreamer for the mounted Brio camera
 
@@ -600,7 +821,8 @@ ros2 launch waverover_base scout_pi_launch.py
 - Serial bridge starts.
 - uStreamer starts.
 - Browser stream becomes available at port 8080.
-- Rover is ready to receive /cmd_vel.
+- Rover is ready to receive `/cmd_vel_raw` from the laptop.
+- Obstacle assist publishes filtered `/cmd_vel` for the motor bridge.
 
 ### Laptop — Start Scout Operator Stack
 
@@ -614,7 +836,8 @@ ros2 launch waverover_control scout_laptop_launch.py
 
 - Controller node starts.
 - Custom teleop mapping node starts.
-- Controller commands publish to /cmd_vel.
+- Controller commands publish to `/cmd_vel_raw`.
+- Obstacle assist filters `/cmd_vel_raw` into `/cmd_vel`.
 - No image_view window opens.
 
 ### Browser — Start Driver View
@@ -623,43 +846,98 @@ ros2 launch waverover_control scout_laptop_launch.py
 
 ---
 
-## Scout + LiDAR Coexistence Baseline
+---
 
-Scout Mode and LiDAR can run together.
+## Scout + LiDAR + Obstacle Assist Baseline
+
+Scout Mode, LiDAR, obstacle assist, and the Brio/uStreamer camera can run together from launch files.
 
 ### Observed working stack:
 
-- Pi launch: ros2 launch waverover_base scout_pi_launch.py
-- LiDAR launch: ros2 launch rplidar_ros rplidar_a1_launch.py serial_port:=/dev/ttyUSB0
-- Laptop launch: ros2 launch waverover_control scout_laptop_launch.py
-- Browser camera view: http://waverover.local:8080/stream?advance_headers=1
+- Pi launch: `ros2 launch waverover_base scout_pi_launch.py`
+- Laptop launch: `ros2 launch waverover_control scout_laptop_launch.py`
+- Browser camera view: `http://waverover.local:8080/stream?advance_headers=1`
+
+### Current Pi launch starts:
+
+- `rplidar_node`
+- `obstacle_assist_node`
+- `cmd_vel_to_serial`
+- uStreamer Brio camera feed
+
+### Current laptop launch starts:
+
+- `game_controller_node`
+- `joy_to_cmdvel`
+
+### Current topic pipeline:
+
+```
+/joy
+  ↓
+joy_to_cmdvel
+  ↓
+/cmd_vel_raw
+  ↓
+obstacle_assist_node + /scan
+  ↓
+/cmd_vel
+  ↓
+cmd_vel_to_serial
+```
 
 ### Current result:
 
 - uStreamer Brio camera feed stays alive.
-- /scan publishes.
+- `/scan` publishes.
+- `/cmd_vel_raw` publishes from laptop teleop.
+- obstacle_assist_node publishes `/cmd_vel`.
 - Controller teleop remains functional.
 - Rover is safely drivable.
+- Forward motion is blocked when an obstacle is directly in front.
+- Reverse and turning remain available.
 - Main remaining camera limitation is field of view.
-
-### LiDAR Command
-
-```
-source /opt/ros/jazzy/setup.bash
-source ~/waverover_ws/install/setup.bash
-
-ros2 launch rplidar_ros rplidar_a1_launch.py serial_port:=/dev/ttyUSB0
-```
 
 ### Known-good LiDAR baseline:
 
-- Device path: /dev/ttyUSB0
-- Approximate /scan rate: 7.9 Hz
+- Device path: `/dev/ttyUSB0`
+- Approximate `/scan` rate: 7.9–8 Hz
+- Frame ID: `laser`
 - Warnings/errors: None observed during baseline test
+
+### Known-good obstacle assist baseline:
+
+```
+front_center_deg: 180.0
+front_half_width_deg: 25.0
+stop_distance_m: 0.35
+enable_speed_scaling: false
+```
 
 ---
 
 ## Current Known Issues / TODO
+
+### Phase 4 Drive Feel / Controller Tuning
+
+Next major phase before v1.
+
+Planned tuning topics:
+- Max linear speed
+- Max angular speed
+- Turn boost
+- Reverse speed
+- Throttle curve
+- Low-speed crawl behavior
+- Left/right trim
+- Obstacle assist thresholds
+- Controller mode ideas
+- Possible DualSense rumble feedback when obstacle assist detects or blocks against an obstacle
+
+Initial rumble idea:
+- Light rumble when entering obstacle warning range.
+- Stronger pulse when forward motion is blocked.
+- Use `/joy/set_feedback` if supported by the PS5 controller and ROS joy driver.
 
 ### Brio Field of View
 
@@ -707,3 +985,17 @@ A small RC light bar/headlight is planned.
 - Confirm rover battery board output before connecting.
 - Do not power LEDs from Pi GPIO.
 - ROS/GPIO control comes later.
+
+### Post-v0 Documentation Cleanup
+
+After v0 is complete, split this runbook into a structured `docs/` folder or GitHub Pages site.
+
+Likely structure:
+- Quick Start
+- Architecture
+- Scout Mode Bring-Up
+- LiDAR / Obstacle Assist
+- Camera Streaming
+- Controller Mapping
+- Troubleshooting
+- Phase Notes

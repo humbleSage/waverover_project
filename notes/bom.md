@@ -2,6 +2,11 @@
 
 This is a living bill of materials for the Wave Rover project. It tracks installed parts, test equipment, development machines, and planned upgrades.
 
+Current project status:
+- Scout Mode v0 is working with PS5 controller teleop, Brio/uStreamer video, RPLIDAR, and LiDAR-assisted forward obstacle blocking.
+- Current command pipeline is `/cmd_vel_raw → obstacle_assist_node → /cmd_vel`.
+- Next major work is drive/controller tuning before v1 features.
+
 Status labels:
 
 - **Installed** — currently on the rover or in active use
@@ -37,9 +42,9 @@ Status labels:
 
 | Item | Status | Notes |
 |---|---|---|
-| PS5-style controller / DualSense | Active | Current manual teleop controller |
+| PS5-style controller / DualSense | Active | Current manual teleop controller; possible future rumble feedback through `/joy/set_feedback` |
 | Laptop keyboard/terminal control | Active | Used for SSH, ROS commands, and testing |
-| Meta Quest 3S | Planned | Future viewing/control interface; not part of current baseline |
+| Meta Quest 3S | Available | Future viewing/control interface; likely v1 feature, not part of current v0 baseline |
 | Smartphone interface | Planned | Possible future control/viewing interface |
 
 ---
@@ -48,10 +53,10 @@ Status labels:
 
 | Item | Status | Notes |
 |---|---|---|
-| RPLIDAR A1 | Installed | Publishes `/scan`; used for LiDAR/RViz testing |
-| Basic webcam | Installed | Current placeholder scout camera for simple video streaming |
+| RPLIDAR A1 | Installed | Publishes `/scan`; used for RViz testing and LiDAR-assisted obstacle avoidance |
+| Logitech Brio Ultra-HD Pro | Installed | Current scout camera; streamed through uStreamer outside ROS 2; usable but limited FOV |
 | OAK-D Lite | Planned | Future smart vision camera; can provide RGB video, stereo depth, and onboard CV/AI experiments |
-| Encoder motors | Partially installed | Two installed, one per side, for odometry experiments |
+| Encoder motors | Partially installed | Two installed, one per side, for future odometry experiments |
 | IMU | TBD | Not currently confirmed/selected |
 | Environmental sensors | Planned | Possible future monitoring use case |
 
@@ -83,11 +88,12 @@ Status labels:
 
 | Item | Status | Notes |
 |---|---|---|
-| LiDAR mount | Installed | May need anti-twist/stability improvement later |
+| LiDAR mount | Installed | Working for Phase 3; may need anti-twist/stability improvement later |
+| Brio camera mount | Installed | Current scout camera mounting; FOV is limited, future camera/mount likely needed |
 | Cable management parts | Planned | Future printed anchors/tie-downs |
 | Lower cable/ballast tray | Planned | Possible future Fusion part |
 | Small spacers/standoffs | Planned | Useful first fabrication practice parts |
-| Camera mount | TBD | Needed for scout mode; pan-tilt removed from near-term plan |
+| Future OAK-D Lite mount | Planned | Needed after OAK-D Lite is in hand and mounted |
 
 ---
 
@@ -96,9 +102,11 @@ Status labels:
 | Item | Status | Notes |
 |---|---|---|
 | ROS 2 Jazzy | Installed | Current ROS 2 environment |
-| `waverover_base` | Active | Includes serial bridge / rover hardware interface |
-| `waverover_control` | Active | Includes controller-to-`/cmd_vel` teleop mapping |
-| `rplidar_ros` | Active | LiDAR driver package |
+| `waverover_base` | Active | Includes serial bridge / rover hardware interface and Pi-side scout launch |
+| `waverover_control` | Active | Includes controller teleop mapping; publishes `/cmd_vel_raw` for assisted teleop |
+| `waverover_safety` | Active | Includes `obstacle_assist_node`; filters `/cmd_vel_raw` + `/scan` into `/cmd_vel` |
+| `rplidar_ros` | Active | LiDAR driver package; publishes `/scan` from RPLIDAR A1 |
+| `uStreamer` | Active | Streams Brio camera feed outside ROS 2 at port 8080 |
 | Motion test harness | Active | Located under `tests/` |
 | Runbook / safety / controller notes | Active | Located under `notes/` |
 
@@ -120,11 +128,13 @@ Status labels:
 
 | Item | Status | Notes |
 |---|---|---|
-| Basic camera stream | Planned | Next scout-mode milestone |
-| VR/Quest interface | Planned | Only after normal teleop + camera scout mode are stable |
-| Odometry publishing | Planned | Future encoder/control phase |
-| Assisted obstacle behavior | Planned | First simple autonomy behavior |
+| Drive feel / controller tuning phase | Planned | Next major phase; tune speed, trim, throttle curve, turn behavior, and controller feel |
+| DualSense rumble feedback | Planned | Possible tuning-phase feature; rumble when obstacle assist detects or blocks against an obstacle |
+| Odometry publishing | Planned | Future encoder/control phase; publish `/odom` and eventually `odom → base_link` |
 | Improved physical cable routing | Planned | Reliability improvement |
 | Center-of-gravity improvements | Planned | Rover may be top-heavy; revisit later |
+| OAK-D Lite integration | Planned | Future camera/perception upgrade; no more major camera work until it is in hand and mounted |
+| VR/Quest interface | Planned | Likely v1 feature after v0 tuning and core rover behavior are stable |
+| Smartphone interface | Planned | Possible future control/viewing interface |
 | Outdoor scout platform | Planned | Longer-term, more rugged security/exploration rover |
-| OAK-D Lite integration | Planned | Future camera/perception upgrade after basic webcam streaming works |
+| Environmental monitoring | Planned | Possible future use case after core scout behavior is stable |
